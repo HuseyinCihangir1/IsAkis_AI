@@ -1,0 +1,7 @@
+streamlit
+openai
+pydantic
+pdfplumber
+chromadb
+langchain
+pandas
