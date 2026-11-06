@@ -3,5 +3,7 @@ openai
 pydantic
 pdfplumber
 chromadb
-langchain
 pandas
+pdf2image
+pytesseract
+pillow

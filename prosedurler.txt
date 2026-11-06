@@ -1,0 +1,40 @@
+# Şirket Satın Alma ve Bütçe Onay Prosedürleri Politikası
+
+## 1. Genel Prensipler ve Kapsam
+Bu politika şirketin tüm departmanlarının yapacağı mal ve hizmet alımları, harcama limitleri ve onay yetki mekanizmalarını belirler.
+
+## 2. Kategori Bazlı Bütçe ve Harcama Limitleri
+Her bir harcama kategorisi için belirlenen tekil talep/işlem bütçe limitleri aşağıdadır:
+
+- **Donanım Alımları (Bilgisayar, Sunucu, Monitör, Donanım Bileşenleri):**
+  - Standart işlem bütçe üst limiti: 100.000 TRY.
+  - 100.000 TRY üzerindeki donanım alımları için Bilgi Teknolojileri (BT) Direktörü ve Finans Direktörü (CFO) ortak onayı gereklidir.
+
+- **Yazılım ve Lisans Alımları (SaaS, Bulut Hizmetleri, Yıllık Lisanslar):**
+  - Standart işlem bütçe üst limiti: 75.000 TRY.
+  - 75.000 TRY üzerindeki yazılım talepleri için BT Güvenlik Komitesi ve CFO onayı şarttır.
+
+- **Ofis ve Sarf Malzemeleri:**
+  - Standart işlem bütçe üst limiti: 25.000 TRY.
+  - 25.000 TRY üzeri alımlarda İdari İşler Müdürü ve Satın Alma Departmanı onayı gerekir.
+
+- **Danışmanlık ve Dış Kaynak Hizmet Alımları:**
+  - Standart işlem bütçe üst limiti: 150.000 TRY.
+  - 150.000 TRY üzeri danışmanlık alımları İcra Kurulu / Genel Müdür (CEO) onayına tabidir.
+
+- **Eğitim ve Sertifikasyon Harcamaları:**
+  - Çalışan başına/talep başına üst limit: 30.000 TRY.
+  - 30.000 TRY üzeri taleplerde İnsan Kaynakları Direktörü onayı gereklidir.
+
+- **Diğer / Genel Hizmet Alımları:**
+  - Belirtilmeyen genel talepler için departman yöneticisi onay tavan limiti: 50.000 TRY'dir.
+
+## 3. Teklif ve Tedarikçi Kuralları
+- 50.000 TRY üzerindeki tüm satın alma taleplerinde en az 3 farklı yetkili tedarikçiden karşılaştırmalı teklif alınması zorunludur.
+- Tedarikçinin vergi levhası ve onaylı tedarikçi listesinde yer alması kontrol edilir.
+
+## 4. Limit Aşımı Durumunda Uygulanacak Prosedür
+Talep tutarı ilgili kategorinin standart bütçe limitini aşıyorsa:
+1. Talep doğrudan onaylanamaz; 'Limit Aşımı - Ek Onay Gereklidir' statüsüne geçer.
+2. Departman müdürü bütçe aşım gerekçesini yazılı olarak Finans Komitesine sunmalıdır.
+
