@@ -1,9 +1,9 @@
 streamlit
-openai
 pydantic
 pdfplumber
 chromadb
 pandas
+requests
 pdf2image
 pytesseract
 pillow
