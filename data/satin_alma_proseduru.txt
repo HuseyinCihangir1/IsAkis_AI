@@ -1,0 +1,34 @@
+====================================================================
+ENTERTECH TEKNOLOJİ A.Ş. - KURUMSAL SATIN ALMA VE HARCAMA PROSEDÜRÜ
+Doküman No: PR-2026-04 | Yayın Tarihi: 15.01.2026 | Revizyon: 02
+====================================================================
+
+1. AMAÇ VE KAPSAM
+Bu prosedür, Entertech Teknokent bünyesinde faaliyet gösteren şirket içi tüm departmanların donanım, yazılım lisansı, kırtasiye ve danışmanlık hizmeti alımlarındaki harcama limitlerini ve onay mekanizmalarını belirler.
+
+2. HARCAMA VE ONAY LİMİTLERİ
+Satın alma talepleri toplam tutarına göre aşağıdaki onay akışına tabi tutulur:
+
+- 0 TL - 10.000 TL Arası Harcamalar:
+  * Otomatik onay kategorisindedir.
+  * Sistem (FlowAgent AI) tarafından bütçe kontrolü yapıldıktan sonra Doğrudan Onay statüsüne geçer.
+  * Departman Yöneticisi veya Genel Müdür onayı gerekmez.
+
+- 10.001 TL - 50.000 TL Arası Harcamalar:
+  * Birincil Derece Yönetici Onayı gerektirir.
+  * Satın alma talebi Departman Yöneticisi onayına yönlendirilir.
+  * İş akışında harcama gerekçesi ve en az 1 tedarikçi teklifi sunulmalıdır.
+
+- 50.001 TL ve Üzeri Harcamalar:
+  * Üst Yönetim / Genel Müdür Onayı zorunludur.
+  * İhale ve teklif karşılaştırma formu (en az 3 farklı tedarikçi teklifi) zorunludur.
+  * Genel Müdür onaylamadığı sürece finans departmanı ödeme yapamaz.
+
+3. KATEGORİ VE DONANIM KURALLARI
+- Donanım (Monitör, Laptop, Sunucu Bileşeni) alımlarında garanti süresi en az 24 ay olmak zorundadır.
+- Yazılım ve Bulut Lisans alımları fatura karşılığı yıllık veya aylık olarak abonelik modeliyle belgelenmelidir.
+- Kırtasiye ve ofis sarf malzemelerinde harcama limiti aylık 5.000 TL'yi geçemez.
+
+4. UYGUNSUZLUK VE RED DURUMLARI
+- Prosedürde belirtilen limitlerin aşılması ve gerekli onayların alınmaması durumunda ödeme talebi doğrudan reddedilir.
+- Eksik veya hatalı vergi numarası/tedarikçi bilgisi içeren faturalar iş akışına alınmaz.   

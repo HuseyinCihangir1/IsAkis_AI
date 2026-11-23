@@ -1,0 +1,30 @@
+====================================================================
+SATIN ALMA TALEP VE TEDARİKCİ TEKLİF FORMU
+Form Tarihi: 04.11.2026 | Talep No: SAT-2026-8891
+====================================================================
+
+TALEP EDEN DEPARTMAN BİLGİLERİ:
+- Departman: Yazılım Dev/Ar-Ge Ekibi
+- Talep Eden: Ahmet Yılmaz (Kıdemli Yazılım Geliştirici)
+- Talep Nedeni: Yeni katılan veri bilimci personeller için geliştirici donanımı tedariki.
+
+TEDARİKÇİ BİLGİLERİ:
+- Tedarikçi Firma Unvanı: Nova Teknoloji ve Bilişim Çözümleri San. Tic. Ltd. Şti.
+- Vergi Dairesi / No: Avcılar VD / 6320981142
+- İletişim / E-Posta: siparis@novateknoloji.com.tr
+
+TALEP EDİLEN KALEMLER VE TUTAR DETAYI:
+1. 27 inç 4K Yazılımcı Monitörü (2 Adet) - Birim Fiyat: 12.500 TL | Toplam: 25.000 TL
+2. Mekanik Kablosuz Klavye & Mouse Seti (2 Adet) - Birim Fiyat: 2.500 TL | Toplam: 5.000 TL
+3. Type-C Docking Station (2 Adet) - Birim Fiyat: 3.500 TL | Toplam: 7.000 TL
+
+TOPLAM HARCAMA ÖZETİ:
+- Ara Toplam: 37.000,00 TL
+- KDV (%20): 7.400,00 TL
+- GENEL TOPLAM TUTAR: 44.400,00 TL
+
+TALEP TÜRÜ / KATEGORİ:
+- Kategori: Donanım / Yazılımcı Ekipmanı
+
+SİSTEM İŞ AKIŞI NOTU:
+Bu form FlowAgent AI tarafından taranarak Tedarikçi, Toplam Tutar (44.400 TL) ve Talep Türü (Donanım) olarak ayrıştırılmalı; 10.000 TL limitini aştığı için 1. Derece Yönetici Onayı (Departman Yöneticisi) akışına yönlendirilmelidir.

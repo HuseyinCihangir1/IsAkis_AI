@@ -14,7 +14,6 @@ def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
     """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    # Yabancı anahtar (Foreign Key) kısıtlamalarını aktif et
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
@@ -22,9 +21,11 @@ def get_connection(db_path: str = DB_NAME) -> sqlite3.Connection:
 def init_db(db_path: str = DB_NAME) -> None:
     """
     FlowAgent projesi için gerekli tabloları otomatik oluşturur:
-    - purchases: Satın alma talepleri ana tablosu (tedarikçi, tutar, durum, onaylayan, notlar vb.)
-    - purchase_items: Talep kalemleri (açıklama, miktar, birim fiyat vb.)
+    - purchases: Satın alma talepleri ana tablosu
+    - purchase_items: Talep kalemleri
     - workflow_logs: Görev akışı aşamalarının denetim kayıtları
+    - tender_analyses: İhale & RFP şartname analizleri ve teklif kayıtları
+    - arge_evaluations: 5746 / 4691 Teknokent & TÜBİTAK Ar-Ge ve teşvik uygunluk değerlendirmeleri
     """
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -45,7 +46,7 @@ def init_db(db_path: str = DB_NAME) -> None:
             onay_tarihi TEXT,
             yonetici_notu TEXT,
             olusturulma_tarihi TEXT NOT NULL,
-            ek_veriler_json TEXT                   -- RAG ve Tool Calling yanıtlarını içeren tam JSON
+            ek_veriler_json TEXT
         );
     """)
 
@@ -78,6 +79,40 @@ def init_db(db_path: str = DB_NAME) -> None:
         );
     """)
 
+    # 4. İhale & RFP Şartname Analizleri Tablosu
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tender_analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ihale_basligi TEXT NOT NULL,
+            kurum_adi TEXT,
+            tahmini_butce TEXT,
+            genel_uyum_skoru INTEGER,
+            kriter_sayisi INTEGER,
+            uyum_matrisi_json TEXT,
+            eksikler_json TEXT,
+            teklif_taslagi TEXT,
+            tarih TEXT NOT NULL
+        );
+    """)
+
+    # 5. Teknokent 5746 / 4691 & TÜBİTAK Ar-Ge Harcama Uygunluk Tablosu
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS arge_evaluations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            talep_id INTEGER,
+            tedarikci TEXT,
+            tutar REAL,
+            kategori TEXT,
+            arge_kapsaminda_mi INTEGER DEFAULT 1,
+            muafiyet_orani INTEGER,
+            tahmini_vergi_avantaji REAL,
+            tubitak_butce_kodu TEXT,
+            teknokent_gerekce TEXT,
+            denetim_notu TEXT,
+            tarih TEXT NOT NULL
+        );
+    """)
+
     conn.commit()
     conn.close()
 
@@ -98,13 +133,6 @@ def add_request(
     workflow_loglari: Optional[List[Any]] = None,
     db_path: str = DB_NAME
 ) -> int:
-    """
-    Veritabanına yeni bir satın alma talebi (purchase) kaydı ekler.
-    Varsa ilişkili kalemleri ve workflow loglarını da kaydeder.
-    
-    Returns:
-        int: Oluşturulan talebin ID numarası.
-    """
     init_db(db_path)
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -137,7 +165,6 @@ def add_request(
 
     purchase_id = cursor.lastrowid
 
-    # Kalemleri ekle
     if kalemler:
         for k in kalemler:
             cursor.execute("""
@@ -153,10 +180,8 @@ def add_request(
                 k.get("toplam_fiyat")
             ))
 
-    # Workflow loglarını ekle
     if workflow_loglari:
         for w in workflow_loglari:
-            # Pydantic veya Dict kontrolü
             adim_no = getattr(w, "adim_no", None) or (w.get("adim_no") if isinstance(w, dict) else None)
             adim_adi = getattr(w, "adim_adi", None) or (w.get("adim_adi") if isinstance(w, dict) else "")
             baslangic = getattr(w, "baslangic_zamani", None) or (w.get("baslangic_zamani") if isinstance(w, dict) else "")
@@ -176,10 +201,6 @@ def add_request(
 
 
 def get_requests(limit: int = 50, durum: Optional[str] = None, db_path: str = DB_NAME) -> List[Dict[str, Any]]:
-    """
-    Veritabanındaki tüm satın alma kayıtlarını en yeniden en eskiye listeler.
-    İsteğe bağlı olarak durum (BEKLEMEDE, ONAYLANDI, REDDEDILDI) filtresi alır.
-    """
     init_db(db_path)
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -202,9 +223,6 @@ def update_request_status(
     onaylayan: str = "Yetkili Kullanıcı",
     db_path: str = DB_NAME
 ) -> bool:
-    """
-    Mevcut bir satın alma talebinin durumunu (ONAYLANDI / REDDEDILDI) günceller.
-    """
     init_db(db_path)
     conn = get_connection(db_path)
     cursor = conn.cursor()
@@ -222,37 +240,104 @@ def update_request_status(
     return degisen_sayi > 0
 
 
-# ---------------------------------------------------------
-# Örnek Kullanım Kodu (Test Bloğu)
-# ---------------------------------------------------------
-if __name__ == "__main__":
-    print("--- FlowAgent SQLite Veritabanı Testi Başlıyor ---")
-    
-    # 1. Veritabanını ve tabloları ilklendir
-    init_db()
-    print("1. init_db() calisti ve tablolar olusturuldu.")
+def add_tender_analysis(
+    ihale_basligi: str,
+    kurum_adi: str,
+    tahmini_butce: str,
+    genel_uyum_skoru: int,
+    kriter_sayisi: int,
+    uyum_matrisi: List[Dict[str, Any]],
+    eksikler: List[str],
+    teklif_taslagi: str,
+    db_path: str = DB_NAME
+) -> int:
+    init_db(db_path)
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    simdi = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 2. Yeni talep ekleme testi (add_request)
-    ornek_id = add_request(
-        dosya_adi="ornek_fatura.pdf",
-        tedarikci="XYZ Bilişim Teknolojileri A.Ş.",
-        vergi_no="9876543210",
-        tutar=125000.0,
-        para_birimi="TRY",
-        talep_turu="Donanım Alımı",
-        politika_uygun_mu=False,
-        durum="BEKLEMEDE",
-        yonetici_notu="Bütçe komitesi incelemesinde",
-        kalemler=[
-            {"aciklama": "AI GPU Sunucu", "miktar": 2, "birim": "Adet", "birim_fiyat": 50000.0, "toplam_fiyat": 100000.0},
-            {"aciklama": "Monitör", "miktar": 5, "birim": "Adet", "birim_fiyat": 5000.0, "toplam_fiyat": 25000.0}
-        ]
-    )
-    print(f"2. Yeni talep eklendi. Olusan Kayit ID: {ornek_id}")
+    cursor.execute("""
+        INSERT INTO tender_analyses (
+            ihale_basligi, kurum_adi, tahmini_butce, genel_uyum_skoru,
+            kriter_sayisi, uyum_matrisi_json, eksikler_json, teklif_taslagi, tarih
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        ihale_basligi,
+        kurum_adi,
+        tahmini_butce,
+        genel_uyum_skoru,
+        kriter_sayisi,
+        json.dumps(uyum_matrisi, ensure_ascii=False),
+        json.dumps(eksikler, ensure_ascii=False),
+        teklif_taslagi,
+        simdi
+    ))
+    t_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return t_id
 
-    # 3. Tüm kayıtları listeleme testi (get_requests)
-    kayitlar = get_requests()
-    print(f"3. get_requests() calisti. Toplam kayit sayisi: {len(kayitlar)}")
-    for k in kayitlar:
-        print(f"   -> ID: {k['id']} | Tedarikci: {k['tedarikci']} | Tutar: {k['tutar']} {k['para_birimi']} | Durum: {k['durum']}")
 
+def get_tender_analyses(limit: int = 30, db_path: str = DB_NAME) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tender_analyses ORDER BY id DESC LIMIT ?", (limit,))
+    rows = cursor.fetchall()
+    sonuclar = [dict(r) for r in rows]
+    conn.close()
+    return sonuclar
+
+
+def add_arge_evaluation(
+    talep_id: Optional[int],
+    tedarikci: str,
+    tutar: float,
+    kategori: str,
+    arge_kapsaminda_mi: bool,
+    muafiyet_orani: int,
+    tahmini_vergi_avantaji: float,
+    tubitak_butce_kodu: str,
+    teknokent_gerekce: str,
+    denetim_notu: str,
+    db_path: str = DB_NAME
+) -> int:
+    init_db(db_path)
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    simdi = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+        INSERT INTO arge_evaluations (
+            talep_id, tedarikci, tutar, kategori, arge_kapsaminda_mi,
+            muafiyet_orani, tahmini_vergi_avantaji, tubitak_butce_kodu,
+            teknokent_gerekce, denetim_notu, tarih
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        talep_id,
+        tedarikci,
+        tutar,
+        kategori,
+        1 if arge_kapsaminda_mi else 0,
+        muafiyet_orani,
+        tahmini_vergi_avantaji,
+        tubitak_butce_kodu,
+        teknokent_gerekce,
+        denetim_notu,
+        simdi
+    ))
+    arge_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return arge_id
+
+
+def get_arge_evaluations(limit: int = 50, db_path: str = DB_NAME) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM arge_evaluations ORDER BY id DESC LIMIT ?", (limit,))
+    rows = cursor.fetchall()
+    sonuclar = [dict(r) for r in rows]
+    conn.close()
+    return sonuclar

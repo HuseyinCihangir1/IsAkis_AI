@@ -1,0 +1,32 @@
+# Şirket Yetkinlik, Sertifikasyon ve Teknik Altyapı Profili (Teknopark A.Ş.)
+
+## 1. Kurumsal Sertifikasyonlar ve Standartlar
+- ISO 9001 Kalite Yönetim Sistemi sertifikası mevcuttur (Geçerlilik: 2027).
+- ISO 27001 Bilgi Güvenliği Yönetim Sistemi sertifikası mevcuttur (Tüm veri merkezleri ve operasyonları kapsar).
+- ISO 22301 İş Sürekliliği Yönetim Sistemi sertifikası bulunmaktadır.
+- CMMI Seviye 3 (Level 3) yazılım geliştirme olgunluk belgesine sahiptir.
+- KVKK ve GDPR tam uyumluluk denetim raporu ve açık rıza yönetim sistemi mevcuttur.
+
+## 2. Yazılım ve Sistem Altyapısı Yetkinlikleri
+- Dağıtık mikroservis mimarisi (Docker, Kubernetes / K8s kümeleme, Helm) konusunda 5+ yıllık kurumsal deneyim.
+- Çoklu bulut (Multi-cloud: AWS, Azure, On-Premise hibrit) entegrasyonu ve sıfır kesinti (Zero-Downtime) CI/CD süreçleri.
+- İlişkisel (PostgreSQL, Oracle) ve NoSQL (MongoDB, Redis, Elasticsearch) veritabanı yönetim uzmanlığı.
+- Veri şifreleme: Dinlenme halinde (AES-256) ve iletim halinde (TLS 1.3) uçtan uca şifreleme standartları.
+- Yapay Zeka / NLP / LLM ve büyük dil modellerinin yerel (On-Premise / Edge) sunucularda güvenli çalıştırılması ve RAG mimarisi.
+
+## 3. Personel ve Mühendislik Kadrosu
+- Şirket bünyesinde 45 tam zamanlı AR-GE ve yazılım mühendisi bulunmaktadır.
+- Ekipte en az 3 adet PMP (Project Management Professional) sertifikalı kıdemli proje yöneticisi yer almaktadır.
+- 5 kıdemli DevOps / Bulut Mimarı (AWS Certified Solutions Architect & CKA sertifikalı).
+- 4 Kıdemli Siber Güvenlik ve Sızma Testi Uzmanı (CEH, CISSP sertifikalı).
+
+## 4. Destek, SLA ve Bakım Taahhütleri
+- 7/24 Kesintisiz Seviye-1, Seviye-2 ve Seviye-3 Teknik Destek Hizmeti.
+- Kritik seviye (P1) arızalarda ilk müdahale süresi maksimum 15 dakika, çözüm süresi maksimum 4 saattir.
+- Sistem çalışma süresi (Uptime) garantisi %99.95'tir.
+- Ürün tesliminden sonra 24 ay boyunca ücretsiz garanti, yama ve sürüm güncelleme desteği verilmektedir.
+
+## 5. Referans Projeler
+- Savunma sanayii ve kamu kurumlarına yönelik 3 büyük ölçekli entegrasyon projesi başarıyla teslim edilmiştir.
+- Finans ve bankacılık sektöründe günlük 10+ milyon işlem hacimli yüksek erişilebilir mikroservis projesi canlıdadır.
+

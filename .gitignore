@@ -1,0 +1,36 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ChromaDB Vektör Veritabanı
+chroma_db/
+chroma.sqlite3
+
+# SQLite Yerel Veritabanı Dosyaları
+*.db
+*.sqlite
+*.sqlite3
+
+# Test ve Demo Çıktıları
+test_*.db
+audit_log.db
+flowagent.db
+
+# Ortam ve Sanal Ortamlar
+.env
+venv/
+env/
+.venv/
+ENV/
+
+# Streamlit ve IDE
+.streamlit/
+.idea/
+.vscode/
+*.swp
+
+# İşletim Sistemi
+Thumbs.db
+Desktop.ini
+.DS_Store

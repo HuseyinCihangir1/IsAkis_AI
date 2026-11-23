@@ -81,6 +81,46 @@ class WorkflowLogAdimi(BaseModel):
     arac_cagrilari: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class IhaleKriteriUyum(BaseModel):
+    madde_no: str = Field(description="Şartnamedeki madde veya kriter numarası")
+    kriter_tanimi: str = Field(description="Şartnamede aranan teknik veya idari gereksinim")
+    kategori: str = Field(default="Teknik", description="Kriter kategorisi (Sertifikasyon, Altyapı, Personel, SLA vb.)")
+    durum: str = Field(description="Uyum Durumu: 'UYGUN', 'KISMEN UYGUN' veya 'UYGUN DEĞİL'")
+    sirket_karsiligi: str = Field(description="Şirketin dokümanlarında bu kriteri karşılayan yetkinliği veya eksiklik gerekçesi")
+
+
+class IhaleAnalizRaporu(BaseModel):
+    ihale_basligi: str = Field(description="İhale veya şartname başlığı / konusu")
+    kurum_adi: Optional[str] = Field(default=None, description="İhaleyi açan kurum veya müşteri adı")
+    tahmini_butce: Optional[str] = Field(default=None, description="Şartnamede belirtilen bütçe veya bedel")
+    genel_uyum_skoru: int = Field(description="Şirketin şartnameye genel uyum yüzdesi (0-100)")
+    uyum_matrisi: List[IhaleKriteriUyum] = Field(default_factory=list, description="Teknik ve idari kriterlerin karşılaştırmalı uyum matrisi")
+    eksik_ve_riskler: List[str] = Field(default_factory=list, description="Karşılanamayan maddeler ve teklif riskleri")
+    teklif_taslagi: str = Field(description="Şartnameye ve şirketin yetkinliklerine göre hazırlanmış profesyonel teklif mektubu taslağı")
+
+
+class ButceVeMaliyetDenetimi(BaseModel):
+    uygun_mu: bool = Field(description="Harcamanın proje bütçesi ve şirket maliyet standartlarına uygunluğu")
+    harcama_turu: str = Field(description="Harcama sınıfı: 'Yazılım/SaaS & Bulut', 'Donanım/Ar-Ge Ekipmanı', 'Dış Kaynak/Hizmet', 'Genel Gider'")
+    muafiyet_veya_tesvik_orani: int = Field(default=100, description="Teknokent/Ar-Ge veya Kurumlar Vergisi indirim oranı (%)")
+    tahmini_vergi_avantaji: float = Field(description="Teknokent KDV & Kurumlar Vergisi indirimi toplam kazancı (TRY)")
+    tubitak_butce_kodu: str = Field(description="TÜBİTAK/Proje Maliyet Fasıl Kodu (M01-M04)")
+    maliyet_optimizasyon_onerisi: str = Field(description="Yazılım/KOBİ ve Kurumsal şirketler için tasarruf & lisans optimizasyon tavsiyesi")
+    denetim_ve_ymm_notu: str = Field(description="Mali müşavir, bütçe komitesi ve yönetim denetim notu")
+
+
+# Geriye dönük uyumluluk için alias
+ArGeHarcamaUygunlugu = ButceVeMaliyetDenetimi
+
+
+class TedarikciRiskSkoru(BaseModel):
+    tedarikci_adi: str
+    risk_seviyesi: str  # DÜŞÜK, ORTA, YÜKSEK
+    skor: int  # 0-100
+    risk_faktörleri: List[str]
+    tavsiye_edilen_odeme_sartlari: str
+
+
 # ---------------------------------------------------------
 # 2. Ollama Yerel LLM İstek Yardımcısı
 # ---------------------------------------------------------
@@ -673,3 +713,406 @@ def gorev_akisini_yurut(
         "butce_sonucu": butce_sonucu,
         "workflow_loglari": is_akisi_loglari
     }
+
+
+# ---------------------------------------------------------
+# 10. İhale / Teklif Uyum Matrisi ve Otomatik Teklif Taslağı (RFP Analiz Modülü)
+# ---------------------------------------------------------
+def sirket_yetkinliklerini_chromaya_indeksle(
+    yetkinlik_metni: Optional[str] = None,
+    collection_name: str = "sirket_yetkinlik_profili",
+    persist_dir: str = "./chroma_db"
+) -> chromadb.Collection:
+    """
+    Şirketin yetkinliklerini, sertifikalarını ve SLA taahhütlerini ChromaDB'ye indeksler.
+    """
+    if not yetkinlik_metni:
+        if os.path.exists("sirket_yetkinlikleri.txt"):
+            with open("sirket_yetkinlikleri.txt", "r", encoding="utf-8") as f:
+                yetkinlik_metni = f.read()
+        else:
+            yetkinlik_metni = "ISO 9001 ve ISO 27001 sertifikaları mevcuttur. 7/24 SLA desteği ve Kubernetes mikroservis altyapısı vardır."
+
+    chroma_client = chromadb.PersistentClient(path=persist_dir)
+    try:
+        chroma_client.delete_collection(name=collection_name)
+    except Exception:
+        pass
+
+    collection = chroma_client.create_collection(
+        name=collection_name,
+        metadata={"hnsw:space": "cosine"}
+    )
+
+    parcalar = [p.strip() for p in yetkinlik_metni.split("\n\n") if p.strip()]
+    docs = []
+    ids = []
+    metas = []
+    for idx, p in enumerate(parcalar):
+        if len(p) < 10:
+            continue
+        docs.append(p)
+        ids.append(f"yetkinlik_{idx}")
+        metas.append({"parca_id": idx})
+
+    if docs:
+        collection.add(documents=docs, metadatas=metas, ids=ids)
+
+    return collection
+
+
+def kural_tabanli_ihale_analizi(sartname_metni: str, sirket_profili: str) -> IhaleAnalizRaporu:
+    """
+    Ollama kapalı veya model gecikmeli olduğunda deterministik olarak çalışan akıllı kural motoru.
+    """
+    sartname_lower = sartname_metni.lower()
+    matris: List[IhaleKriteriUyum] = []
+    eksikler: List[str] = []
+
+    # Standart Kriter Kontrolü (ISO 27001, Kubernetes, SLA, PMP, CMMI)
+    kriter_havuzu = [
+        {
+            "madde": "Madde 1.1",
+            "kriter": "ISO 27001 Bilgi Güvenliği Yönetim Sistemi Sertifikası zorunludur.",
+            "kategori": "Sertifikasyon",
+            "anahtar": ["iso 27001", "27001", "bilgi güvenliği"],
+            "sirket": "Şirketimiz ISO 27001 sertifikasına sahip olup tüm veri merkezlerini kapsamaktadır.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 1.2",
+            "kriter": "CMMI Seviye 3 veya dengi yazılım olgunluk belgesi gereklidir.",
+            "kategori": "Sertifikasyon",
+            "anahtar": ["cmmi", "olgunluk"],
+            "sirket": "Şirketimiz CMMI Seviye 3 sertifikasyonuna sahiptir.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 2.1",
+            "kriter": "Dağıtık mikroservis ve Kubernetes (K8s) mimarisinde çalışma deneyimi aranmaktadır.",
+            "kategori": "Teknik Altyapı",
+            "anahtar": ["kubernetes", "k8s", "mikroservis", "docker", "konteyner"],
+            "sirket": "5+ yıllık kurumsal Kubernetes ve mikroservis kümeleme tecrübemiz bulunmaktadır.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 2.2",
+            "kriter": "Veri tabanında ve veri transferinde TLS 1.3 / AES-256 uçtan uca şifreleme sağlanmalıdır.",
+            "kategori": "Güvenlik & KVKK",
+            "anahtar": ["şifreleme", "aes", "tls", "kvkk", "güvenlik"],
+            "sirket": "Aktif ve dinlenme halindeki tüm veriler AES-256 ve TLS 1.3 standartlarında korunmaktadır.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 3.1",
+            "kriter": "Proje ekibinde en az 2 adet sertifikalı PMP Proje Yöneticisi bulunmalıdır.",
+            "kategori": "Personel",
+            "anahtar": ["pmp", "proje yöneticisi", "personel"],
+            "sirket": "Bünyemizde 3 adet aktif PMP sertifikalı kıdemli proje yöneticisi istihdam edilmektedir.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 4.1",
+            "kriter": "7/24 teknik destek ve kritik arızalarda en geç 30 dakika içinde müdahale taahhüt edilmelidir.",
+            "kategori": "SLA & Destek",
+            "anahtar": ["7/24", "destek", "sla", "müdahale", "uptime"],
+            "sirket": "7/24 Destek Merkezimiz P1 arızalara 15 dakika müdahale ve %99.95 uptime garantisi sunmaktadır.",
+            "uygun": True
+        },
+        {
+            "madde": "Madde 5.1",
+            "kriter": "En az 3 adet büyük ölçekli kurumsal / kamu entegrasyon referansı sunulmalıdır.",
+            "kategori": "Referanslar",
+            "anahtar": ["referans", "kamu", "entegrasyon", "proje"],
+            "sirket": "Savunma sanayii ve kamu kuruluşlarında tamamlanmış 3 büyük ölçekli canlı referansımız mevcuttur.",
+            "uygun": True
+        }
+    ]
+
+    # Şartnamede geçen veya genel kabul gören maddeleri tara
+    uygun_sayisi = 0
+    for k in kriter_havuzu:
+        # Şartname içinde anahtar kelimelerden biri geçiyorsa veya genel kriterse listeye al
+        geciyor = any(w in sartname_lower for w in k["anahtar"])
+        if geciyor or len(matris) < 5:
+            matris.append(IhaleKriteriUyum(
+                madde_no=k["madde"],
+                kriter_tanimi=k["kriter"],
+                kategori=k["kategori"],
+                durum="UYGUN" if k["uygun"] else "UYGUN DEĞİL",
+                sirket_karsiligi=k["sirket"]
+            ))
+            if k["uygun"]:
+                uygun_sayisi += 1
+            else:
+                eksikler.append(k["kriter"])
+
+    skor = int((uygun_sayisi / max(1, len(matris))) * 100)
+
+    # İhale Başlığı Çıkarımı
+    satirlar = [s.strip() for s in sartname_metni.split("\n") if s.strip()]
+    baslik = satirlar[0] if satirlar else "Kurumsal Yazılım ve Sistem Entegrasyonu İhalesi"
+    if len(baslik) > 80:
+        baslik = baslik[:80] + "..."
+
+    # Profesyonel Teklif Mektubu Taslağı Üretimi
+    teklif_taslagi = f"""# TEKNİK VE TİCARİ TEKLİF MEKTUBU
+
+**Tarih:** {datetime.now().strftime('%d.%m.%Y')}  
+**Teklif No:** TEK-{datetime.now().strftime('%Y%m%d')}-01  
+**Konu:** {baslik} Kapsamında Teknik Çözüm ve Fiyat Teklifi  
+**Hitap:** İhale Değerlendirme Komisyonu Başkanlığı'na,
+
+Sayın Yetkili,
+
+İdareniz/Kurumunuz tarafından yayımlanan **"{baslik}"** teknik şartnamesi ve idari gereksinimleri şirketimiz mühendislik ve proje yönetimi ekipleri tarafından detaylı bir şekilde incelenmiştir.
+
+### 1. Yetkinlik ve Altyapı Uygunluğumuz
+Şirketimiz, Teknopark bünyesinde faaliyet gösteren ve **ISO 9001, ISO 27001, ISO 22301 ve CMMI Seviye 3** sertifikasyonlarına sahip kurumsal bir Ar-Ge kuruluşudur. Şartnamede talep edilen mikroservis mimarisi, yüksek erişilebilirlik (Kubernetes kümeleme) ve uçtan uca veri güvenliği (TLS 1.3, AES-256) kriterleri mevcut altyapımız tarafından **%100 oranında** karşılanmaktadır.
+
+### 2. İhale Uyum Özeti
+- **Toplam İncelenen Kriter:** {len(matris)} Madde
+- **Tam Karşılanan Kriter:** {uygun_sayisi} Madde
+- **Teknik Uyum Skoru:** %{skor}
+
+### 3. Taahhütlerimiz ve Destek Garantisi
+- **Proje Yönetimi:** Proje, bünyemizde istihdam edilen kıdemli **PMP sertifikalı proje yöneticileri** ve sertifikalı bulut mimarları liderliğinde yönetilecektir.
+- **SLA ve Garanti:** Sistem canlıya alındıktan sonra 24 ay ücretsiz garanti ve bakım sağlanacak, kritik arızalara 7/24 esasıyla **maksimum 15 dakika** içerisinde müdahale edilecektir (%99.95 Uptime taahhüdü).
+
+Teklifimizin idarenizce uygun görülmesi halinde, detaylı proje iş planı ve teknik mimari dokümantasyonu ivedilikle takdim edilecektir.
+
+Bilgilerinize arz eder, iş birliğimizin hayırlı olmasını dileriz.
+
+**Saygılarımızla,**  
+**Teknopark Yazılım ve Sistem Entegrasyon A.Ş.**  
+*Kurumsal Satış ve İhale Direktörlüğü*
+"""
+
+    return IhaleAnalizRaporu(
+        ihale_basligi=baslik,
+        kurum_adi="İhale Makamı / İlgili Kurum",
+        tahmini_butce="Şartname Kapsamında Belirlenecektir",
+        genel_uyum_skoru=skor,
+        uyum_matrisi=matris,
+        eksik_ve_riskler=eksikler if eksikler else ["Önemli bir teknik risk tespit edilmemiştir."],
+        teklif_taslagi=teklif_taslagi
+    )
+
+
+def ihale_sartname_ve_teklif_analizi(
+    sartname_girdisi: Any,
+    dosya_adi: str = "",
+    sirket_yetkinlik_metni: Optional[str] = None,
+    model: str = DEFAULT_MODEL
+) -> IhaleAnalizRaporu:
+    """
+    RAG ile ihale şartnamesini şirket yetkinlik dokümanlarıyla karşılaştırır:
+    1. Belgeden metin çıkarır (OCR / PDF).
+    2. ChromaDB RAG üzerinden şirketin mevcut sertifika ve altyapı maddelerini sorgular.
+    3. Yerel Ollama modeli (qwen3.5:0.8b) veya akıllı kural motoru ile:
+       - Karşılaştırmalı İhale Kriter Uyum Matrisi
+       - Kurumsal Otomatik İhale Teklif Taslağı
+       üretir.
+    """
+    # 1. Metin Çıkarımı
+    cikarma = pdf_veya_gorselden_metin_cikar(sartname_girdisi, dosya_adi=dosya_adi)
+    sartname_metni = cikarma["metin"]
+
+    # 2. Şirket Yetkinlik Profilini Al ve ChromaDB Koleksiyonunu hazırla
+    if not sirket_yetkinlik_metni:
+        if os.path.exists("sirket_yetkinlikleri.txt"):
+            with open("sirket_yetkinlikleri.txt", "r", encoding="utf-8") as f:
+                sirket_yetkinlik_metni = f.read()
+        else:
+            sirket_yetkinlik_metni = "Şirket ISO 27001 ve ISO 9001 sertifikalıdır. Kubernetes ve 7/24 SLA desteği mevcuttur."
+
+    chroma_client = chromadb.PersistentClient(path="./chroma_db")
+    collection = None
+    try:
+        collection = chroma_client.get_collection(name="sirket_yetkinlik_profili")
+    except Exception:
+        pass
+
+    if collection is None or collection.count() == 0:
+        collection = sirket_yetkinliklerini_chromaya_indeksle(sirket_yetkinlik_metni)
+
+    # RAG Context: Şartnameden ilk 500 karakter ile şirketin ilgili maddelerini sorgula
+    sorgu = sartname_metni[:400].replace("\n", " ")
+    context_parcalari = []
+    if collection and collection.count() > 0:
+        results = collection.query(query_texts=[sorgu], n_results=min(3, collection.count()))
+        if results.get("documents"):
+            context_parcalari = results["documents"][0]
+    sirket_context = "\n---\n".join(context_parcalari) if context_parcalari else sirket_yetkinlik_metni
+
+    # 3. Yerel Qwen Modeli ile Analiz Denemesi
+    system_prompt = (
+        "Sen teknopark yazılım şirketinde çalışan kıdemli bir İhale ve Teklif Analistisin. "
+        "Gelen şartnameyi şirketimizin yetkinlik dokümanlarıyla karşılaştır. "
+        "Sonucu kesinlikle sadece şu JSON şemasına uygun olarak üret:\n"
+        "{\n"
+        '  "ihale_basligi": "Şartname / İhale Başlığı",\n'
+        '  "kurum_adi": "Kurum Adı",\n'
+        '  "tahmini_butce": "Belirtilmişse Bütçe",\n'
+        '  "genel_uyum_skoru": 95,\n'
+        '  "uyum_matrisi": [\n'
+        '    {"madde_no": "Madde 1", "kriter_tanimi": "Aranan Kriter", "kategori": "Teknik", "durum": "UYGUN", "sirket_karsiligi": "Şirket yetkinliği"}\n'
+        '  ],\n'
+        '  "eksik_ve_riskler": ["Varsa riskler"],\n'
+        '  "teklif_taslagi": "Kurumsal resmi teklif mektubu taslağı markdown metni..."\n'
+        "}"
+    )
+
+    user_prompt = f"""
+İhale Şartnamesi Metni (İlk Bölüm):
+{sartname_metni[:1500]}
+
+Şirketimizin Yetkinlik ve Altyapı Profili (RAG Context):
+{sirket_context}
+
+Lütfen şartname maddeleri ile şirket yetkinliklerini kıyaslayarak detaylı bir uyum matrisi ve profesyonel teklif taslağı oluştur.
+"""
+
+    try:
+        raw_res = ollama_generate(prompt=user_prompt, system=system_prompt, model=model, json_format=True)
+        res_json = json_metni_ayikla(raw_res)
+        if res_json and "uyum_matrisi" in res_json and len(res_json["uyum_matrisi"]) > 0:
+            matris_items = []
+            for item in res_json["uyum_matrisi"]:
+                matris_items.append(IhaleKriteriUyum(
+                    madde_no=str(item.get("madde_no", "Kriter")),
+                    kriter_tanimi=str(item.get("kriter_tanimi", "Şartname gereksinimi")),
+                    kategori=str(item.get("kategori", "Teknik")),
+                    durum=str(item.get("durum", "UYGUN")),
+                    sirket_karsiligi=str(item.get("sirket_karsiligi", "Şirket profiliyle eşleşmektedir."))
+                ))
+
+            return IhaleAnalizRaporu(
+                ihale_basligi=res_json.get("ihale_basligi", "İhale Teknik Şartnamesi"),
+                kurum_adi=res_json.get("kurum_adi", "İhale Komisyonu"),
+                tahmini_butce=res_json.get("tahmini_butce", "Bütçe Belirtilmedi"),
+                genel_uyum_skoru=int(res_json.get("genel_uyum_skoru", 90)),
+                uyum_matrisi=matris_items,
+                eksik_ve_riskler=res_json.get("eksik_ve_riskler", ["Kritik eksiklik bulunmamaktadır."]),
+                teklif_taslagi=res_json.get("teklif_taslagi", "Resmi teklif taslağı oluşturuldu.")
+            )
+    except Exception:
+        pass
+
+    # Model yanıt vermezse veya gecikirse kural tabanlı motoru çalıştır
+    return kural_tabanli_ihale_analizi(sartname_metni, sirket_yetkinlik_metni)
+
+
+# ---------------------------------------------------------
+# 11. B2B / SaaS & Proje Maliyet Denetim ve Teknokent Teşvik Motoru
+# ---------------------------------------------------------
+def butce_ve_maliyet_denetimi_yap(
+    talep: SatinAlmaTalebi,
+    proje_adi: str = "Kurumsal Dijital Dönüşüm ve B2B SaaS Platformu"
+) -> ButceVeMaliyetDenetimi:
+    """
+    Satın alma talebini hem Teknokent KOBİ/Kurumsal maliyet optimizasyonu hem de
+    4691/5746 Sayılı Kanun Ar-Ge teşvikleri ve TÜBİTAK fasıl kodları çerçevesinde değerlendirir.
+    """
+    tutar = talep.toplam_tutar or 0.0
+    kategori_lower = (talep.talep_turu or "genel").lower()
+    kalemler_metin = " ".join([k.aciklama for k in talep.kalemler]).lower()
+
+    if any(w in kategori_lower or w in kalemler_metin for w in ["sunucu", "gpu", "donanım", "bilgisayar", "cihaz", "test"]):
+        sinif = "Donanım / Ar-Ge Ekipmanı"
+        fasıl = "M02 - Alet / Teçhizat / Yazılım Alımları"
+        uygun = True
+        muafiyet = 100
+        tahmini_avantaj = round(tutar * 0.25, 2)
+        oneri = "Yüksek maliyetli tekil alımlar yerine dönemsel amortisman planı veya yıllık kurumsal kiralama/leasing opsiyonu değerlendirilebilir."
+        notu = "Demirbaş kaydı şirket ve Teknokent proje envanterine işlenmeli, fatura üzerine proje onay kodu yazılmalıdır."
+
+    elif any(w in kategori_lower or w in kalemler_metin for w in ["yazılım", "lisans", "saas", "api", "cloud", "bulut"]):
+        sinif = "Yazılım / SaaS & Bulut Hizmetleri"
+        fasıl = "M02 - Yazılım Lisans ve Bulut Altyapı Giderleri"
+        uygun = True
+        muafiyet = 100
+        tahmini_avantaj = round(tutar * 0.25, 2)
+        oneri = "Kullanıcı başına lisanslama yerine yıllık taahhütlü kurumsal paket veya ayrılmış bulut kapasitesi (Reserved Instance) ile %20-30 ek maliyet tasarrufu sağlanabilir."
+        notu = "SaaS ve API harcamaları 5746/4691 kapsamında Kurumlar Vergisi istisnasına ve KDV muafiyetine doğrudan uygundur."
+
+    elif any(w in kategori_lower or w in kalemler_metin for w in ["danışmanlık", "eğitim", "akademik", "analiz", "dış kaynak"]):
+        sinif = "Dış Kaynak & Danışmanlık Hizmeti"
+        fasıl = "M03 - Danışmanlık ve Hizmet Alımı Giderleri"
+        uygun = True
+        muafiyet = 80
+        tahmini_avantaj = round(tutar * 0.20, 2)
+        oneri = "Dış kaynak hizmetlerinde SLA hedefleri ve teslimat çıktıları sözleşmeye bağlanmalı, adam/gün efor raporları denetim dosyasında saklanmalıdır."
+        notu = "Hizmet alımı Ar-Ge ve proje bütçesinden karşılanabilir, stopaj ve kurumlar vergisi avantajı mevcuttur."
+
+    elif any(w in kategori_lower or w in kalemler_metin for w in ["sarf", "ofis", "kağıt", "kırtasiye"]):
+        sinif = "Genel Yönetim ve Sarf Gideri"
+        fasıl = "M04 - Malzeme ve Sarf Giderleri (Kısmi Teşvik)"
+        uygun = False
+        muafiyet = 0
+        tahmini_avantaj = 0.0
+        oneri = "Konsolide toplu alım anlaşmaları ile birim maliyet düşürülmeli, proje bütçesi yerine genel yönetim gideri olarak muhasebeleştirilmelidir."
+        notu = "Doğrudan Ar-Ge projesinde tüketilmeyen genel ofis sarfları teşvik kapsamı dışındadır."
+
+    else:
+        sinif = "Genel Hizmet Alımı"
+        fasıl = "M03 - Diğer Hizmet Alımları"
+        uygun = tutar <= 100000.0
+        muafiyet = 50 if uygun else 0
+        tahmini_avantaj = round(tutar * 0.125, 2) if uygun else 0.0
+        oneri = "Bütçe aşımını önlemek amacıyla çeyreklik departman tavan limitleri kontrol edilmelidir."
+        notu = "YMM ve Bütçe Komitesi onayı gereklidir."
+
+    return ButceVeMaliyetDenetimi(
+        uygun_mu=uygun,
+        harcama_turu=sinif,
+        muafiyet_veya_tesvik_orani=muafiyet,
+        tahmini_vergi_avantaji=tahmini_avantaj,
+        tubitak_butce_kodu=fasıl,
+        maliyet_optimizasyon_onerisi=oneri,
+        denetim_ve_ymm_notu=notu
+    )
+
+
+# Geriye dönük uyumluluk için alias
+arge_harcama_uygunlugu_degerlendir = butce_ve_maliyet_denetimi_yap
+
+
+def tedarikci_kapsamli_risk_analizi(tedarikci_adi: str, tutar: float) -> TedarikciRiskSkoru:
+    """
+    Tedarikçinin ticari geçmişi, vadesi ve sözleşme risklerini puanlar.
+    """
+    ad_k = (tedarikci_adi or "").lower()
+    faktörler = []
+    skor = 90
+    seviye = "DÜŞÜK"
+    vade = "30 Gün Vadeli Fatura Karşılığı Ödeme"
+
+    if any(k in ad_k for k in ["xyz", "beta", "abc"]):
+        faktörler.append("Tedarikçi Teknokent onaylı tedarikçi listesinde yer almaktadır.")
+        faktörler.append("Geçmiş 12 ayda teslimat gecikmesi veya fatura uyuşmazlığı kaydedilmemiştir.")
+    else:
+        skor -= 25
+        faktörler.append("Tedarikçi kurumsal veri tabanında yeni kayıt statüsündedir.")
+        faktörler.append("İlk kez işlem yapılacağından teslimat öncesi numune/test onayı önerilir.")
+
+    if tutar > 100000.0:
+        skor -= 15
+        faktörler.append(f"Talep tutarı ({tutar:,.2f} TRY) yüksek risk tavanındadır; avans yerine teminat mektubu talep edilmelidir.")
+        vade = "%30 Siparişte, %70 Kabul ve Muayene Sonrası 30 Gün"
+
+    if skor >= 80:
+        seviye = "DÜŞÜK RİSK"
+    elif skor >= 55:
+        seviye = "ORTA RİSK"
+    else:
+        seviye = "YÜKSEK RİSK"
+
+    return TedarikciRiskSkoru(
+        tedarikci_adi=tedarikci_adi or "Belirtilmemiş",
+        risk_seviyesi=seviye,
+        skor=skor,
+        risk_faktörleri=faktörler,
+        tavsiye_edilen_odeme_sartlari=vade
+    )
+

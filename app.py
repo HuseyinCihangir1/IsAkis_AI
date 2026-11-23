@@ -9,7 +9,14 @@ from datetime import datetime
 from utils import (
     gorev_akisini_yurut,
     prosedurleri_chromaya_indeksle,
+    ihale_sartname_ve_teklif_analizi,
+    sirket_yetkinliklerini_chromaya_indeksle,
+    butce_ve_maliyet_denetimi_yap,
+    tedarikci_kapsamli_risk_analizi,
     SatinAlmaTalebi,
+    IhaleAnalizRaporu,
+    ButceVeMaliyetDenetimi,
+    TedarikciRiskSkoru,
     OCR_AVAILABLE,
     OLLAMA_BASE_URL,
     DEFAULT_MODEL
@@ -33,48 +40,129 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
+    /* 1. Streamlit 'Deploy' butonunu, üst hamburger menüsünü ve alt 'Made with Streamlit' imzasını tamamen gizle */
+    .stDeployButton,
+    [data-testid="stToolbarActions"],
+    [data-testid="stDecoration"],
+    #MainMenu,
+    footer {
+        visibility: hidden !important;
+        display: none !important;
     }
+    
+    /* 2. Üst Header çubuğunu temizle ve sayfa yerleşimini kusursuzlaştır */
+    header[data-testid="stHeader"] {
+        background: rgba(255, 255, 255, 0.7) !important;
+        backdrop-filter: blur(8px) !important;
+        height: 2.8rem !important;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.8) !important;
+    }
+
+    /* 3. Ana Gövde & Modern Tipografi / Boşluklar */
+    .block-container {
+        padding-top: 3.5rem !important;
+        padding-bottom: 3.5rem !important;
+        max-width: 1320px !important;
+    }
+
+    /* 4. Kurumsal Sekme (Tabs) Tasarımı - SaaS / Web Sitesi Düzeyinde */
+    div[data-baseweb="tab-list"] {
+        gap: 8px !important;
+        background: #f1f5f9 !important;
+        padding: 6px !important;
+        border-radius: 12px !important;
+        border: 1px solid #e2e8f0 !important;
+        margin-bottom: 1.5rem !important;
+    }
+    
+    button[data-baseweb="tab"] {
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        padding: 8px 18px !important;
+        border-radius: 8px !important;
+        color: #475569 !important;
+        border: none !important;
+        background: transparent !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    
+    button[data-baseweb="tab"]:hover {
+        color: #0f172a !important;
+        background: rgba(255, 255, 255, 0.6) !important;
+    }
+
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: #ffffff !important;
+        color: #0284c7 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    }
+
+    /* 5. Kartlar ve Göstergeler (Glassmorphism & Soft Shadow) */
     .metric-card {
         background: #ffffff;
-        border-radius: 10px;
-        padding: 16px 18px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+        border: 1px solid #e2e8f0;
         margin-bottom: 12px;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
     }
     .metric-title {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         font-weight: 600;
         text-transform: uppercase;
-        color: #6c757d;
-        letter-spacing: 0.5px;
+        color: #64748b;
+        letter-spacing: 0.6px;
     }
     .metric-value {
-        font-size: 1.3rem;
+        font-size: 1.35rem;
         font-weight: 700;
-        color: #212529;
-        margin-top: 4px;
+        color: #0f172a;
+        margin-top: 5px;
     }
+
+    /* 6. İş Akışı Zaman Çizelgesi Kartları */
     .workflow-step {
-        background-color: #f8f9fa;
-        border-left: 4px solid #0d6efd;
-        padding: 10px 15px;
-        margin-bottom: 8px;
-        border-radius: 0 8px 8px 0;
+        background-color: #f8fafc;
+        border-left: 4px solid #0284c7;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+        border-radius: 0 10px 10px 0;
+        border-top: 1px solid #f1f5f9;
+        border-right: 1px solid #f1f5f9;
+        border-bottom: 1px solid #f1f5f9;
     }
+
+    /* 7. Butonlar - SaaS Görünümü */
+    div.stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        padding: 0.55rem 1.25rem !important;
+        box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25) !important;
+        transition: all 0.2s ease !important;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 8px rgba(2, 132, 199, 0.35) !important;
+    }
+
+    /* 8. Rozetler */
     .status-badge {
         display: inline-block;
         padding: 4px 12px;
         font-size: 0.85rem;
         font-weight: 600;
-        border-radius: 16px;
+        border-radius: 20px;
     }
-    .badge-approved { background-color: #d1e7dd; color: #0f5132; }
-    .badge-rejected { background-color: #f8d7da; color: #842029; }
-    .badge-pending  { background-color: #fff3cd; color: #664d03; }
+    .badge-approved { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-rejected { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-pending  { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,6 +178,8 @@ if "secili_dosya_adi" not in st.session_state:
     st.session_state["secili_dosya_adi"] = "Bilinmiyor"
 if "aktif_purchase_id" not in st.session_state:
     st.session_state["aktif_purchase_id"] = None
+if "ihale_raporu" not in st.session_state:
+    st.session_state["ihale_raporu"] = None
 
 
 # -----------------------------------------------------------------------------
@@ -104,79 +194,82 @@ def check_ollama_status() -> bool:
 
 ollama_online = check_ollama_status()
 
+# -----------------------------------------------------------------------------
+# Varsayılan Doküman Metinleri (Prosedür & Şirket Yetkinlikleri)
+# -----------------------------------------------------------------------------
+varsayilan_prosedur = ""
+if os.path.exists("prosedurler.txt"):
+    with open("prosedurler.txt", "r", encoding="utf-8") as f:
+        varsayilan_prosedur = f.read()
+else:
+    varsayilan_prosedur = "Standart şirket satın alma ve bütçe onay prosedürü."
+
+varsayilan_yetkinlik = ""
+if os.path.exists("sirket_yetkinlikleri.txt"):
+    with open("sirket_yetkinlikleri.txt", "r", encoding="utf-8") as f:
+        varsayilan_yetkinlik = f.read()
+else:
+    varsayilan_yetkinlik = "Şirket ISO 9001 ve ISO 27001 sertifikalarına sahiptir. 7/24 teknik destek ve Kubernetes altyapısı mevcuttur."
+
 
 # -----------------------------------------------------------------------------
-# Kenar Çubuğu (Yerel Ollama Yapılandırması)
+# Kenar Çubuğu (Yerel LLM Model Seçimi)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/9440/9440409.png", width=54)
-    st.title("FlowAgent Mimarisi")
-    st.caption("Yerel LLM (Ollama) • Tool Calling • RAG • SQLite")
-    
+    st.image("https://cdn-icons-png.flaticon.com/512/9440/9440409.png", width=48)
+    st.title("FlowAgent AI")
+    st.caption("Yerel LLM Altyapısı")
     st.divider()
-    st.markdown("### 🖥️ Yerel Model Yapılandırması")
-    
-    if ollama_online:
-        st.success("🟢 Ollama Sunucusu Aktif (`localhost:11434`)")
-    else:
-        st.warning("⚠️ Ollama Servisi Kapalı (`localhost:11434`). Otomatik Kural Fallback Motoru devrede.")
 
-    selected_model = st.text_input(
-        "Ollama Model Adı",
-        value=DEFAULT_MODEL,
-        help="Bilgisayarınızda çalışan Ollama modeli (örn: qwen3.5:0.8b)"
+    st.markdown("### 🖥️ Model Seçimi")
+    
+    # Kullanıcı isteği: qwen3.5:0.8b ve daha düşük/hafif model seçeneği
+    model_secenekleri = ["qwen3.5:0.8b", "qwen2.5:0.5b", "phi3:mini", "llama3.2:1b"]
+    selected_model = st.selectbox(
+        "Kullanılacak Yerel Model",
+        options=model_secenekleri,
+        index=0,
+        help="qwen3.5:0.8b standart modeldir. Daha düşük kaynak için qwen2.5:0.5b seçebilirsiniz."
     )
 
-    st.divider()
-    st.markdown("### 📚 Şirket Politikası (ChromaDB)")
-    varsayilan_prosedur = ""
-    if os.path.exists("prosedurler.txt"):
-        with open("prosedurler.txt", "r", encoding="utf-8") as f:
-            varsayilan_prosedur = f.read()
-
-    prosedur_metni = st.text_area("Prosedür Metni", value=varsayilan_prosedur, height=120)
-    if st.button("🔄 ChromaDB'yi Yenile & İndeksle", use_container_width=True):
-        with st.spinner("Politika metni ChromaDB'ye indeksleniyor..."):
-            try:
-                prosedurleri_chromaya_indeksle(prosedur_metni)
-                st.success("ChromaDB başarıyla güncellendi!")
-            except Exception as e:
-                st.error(f"Hata: {e}")
+    if ollama_online:
+        st.success("🟢 Ollama Aktif (`11434`)")
+    else:
+        st.warning("⚠️ Ollama Kapalı (Yerel Kural Motoru Aktif)")
 
     st.divider()
-    st.markdown("### ⚡ Hızlı Test Senaryoları")
-    if st.button("📌 Senaryo 1: Onaylı Tedarikçi & Bütçe İçi", use_container_width=True):
-        st.session_state["hizli_metin"] = (
-            "XYZ Bilişim Teknolojileri A.Ş.\n"
-            "Talep Türü: Donanım Alımı\n"
-            "İçerik: 2 adet Geliştirici Bilgisayarı (Adet: 35.000 TRY) ve 2 adet Monitör (Adet: 5.000 TRY).\n"
-            "Toplam Tutar: 80.000 TRY."
-        )
-    if st.button("⚠️ Senaryo 2: Onaysız Tedarikçi & Limit Aşımı", use_container_width=True):
-        st.session_state["hizli_metin"] = (
-            "Mega Nova Global Ltd. Şti.\n"
-            "Talep Türü: Donanım Alımı\n"
-            "İçerik: 4 adet AI GPU Sunucu Kabini (Adet: 45.000 TRY).\n"
-            "Toplam Tutar: 180.000 TRY."
-        )
+    st.caption("🔒 **Veri Gizliliği:** Tüm analizler buluta veri göndermeden tamamen yerel makinede çalıştırılır.")
 
 
 # -----------------------------------------------------------------------------
-# Ana Sayfa Üst Sekmeleri: İş Akışı vs. Yönetim & Analitik Paneli
+# Ana Sayfa Üst Sekmeleri: İş Akışı, İhale/RFP Modülü vs. Yönetim & Analitik
 # -----------------------------------------------------------------------------
-tab_ana_akis, tab_analitik = st.tabs(["🚀 Satın Alma & Görev Akışı", "📊 Yönetim & Bütçe Dashboard"])
+tab_ana_akis, tab_ihale, tab_arge_mevzuat, tab_analitik = st.tabs([
+    "🚀 Satın Alma & Görev Akışı", 
+    "📑 İhale & RFP Analiz Modülü",
+    "💼 B2B / SaaS & Proje Maliyet Denetimi",
+    "📊 Yönetim & Bütçe Dashboard"
+])
 
 # =============================================================================
 # SEKME 1: DOKÜMAN İŞLEME & ONAY AKIŞI
 # =============================================================================
 with tab_ana_akis:
-    st.title("⚡ FlowAgent: Yerel LLM Destekli Doküman İşleme Paneli")
-    st.markdown(
-        f"Yerel bilgisayarınızda çalışan **Ollama ({selected_model})**, **OCR**, "
-        "**Tool Calling (API)**, **ChromaDB RAG** ve yerleşik **SQLite Veritabanı** ile kurumsal satın alma platformu."
-    )
-
-    st.markdown("---")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 22px 26px; border-radius: 14px; border: 1px solid #cbd5e1; margin-bottom: 20px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <h2 style="margin: 0; font-size: 1.65rem; color: #0f172a; font-weight: 800;">⚡ FlowAgent: Akıllı Doküman İşleme ve Onay Masası</h2>
+                <p style="margin: 6px 0 0 0; color: #475569; font-size: 0.95rem;">
+                    Yerel Yapay Zeka <strong>(Ollama Qwen)</strong>, <strong>OCR</strong>, <strong>Tool Calling</strong> ve <strong>RAG</strong> ile kurumsal satın alma otomasyonu.
+                </p>
+            </div>
+            <div style="background: #ffffff; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: #0284c7; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+                Model: """ + selected_model + """
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     col_input1, col_input2 = st.tabs(["📄 PDF veya Görsel Belge Yükle (OCR Destekli)", "✍️ Serbest Metin Olarak Gir"])
     girdi_data = None
@@ -222,7 +315,7 @@ with tab_ana_akis:
                     sonuc = gorev_akisini_yurut(
                         girdi=girdi_data,
                         dosya_adi=dosya_ismi,
-                        prosedur_metni=prosedur_metni,
+                        prosedur_metni=varsayilan_prosedur,
                         model=selected_model
                     )
                     st.session_state["is_akisi_sonucu"] = sonuc
@@ -351,6 +444,45 @@ with tab_ana_akis:
             if butce.gerekli_onaylar:
                 st.markdown("**Gerekli Onay Mercileri:** " + ", ".join([f"`{o}`" for o in butce.gerekli_onaylar]))
 
+        # Teknokent / KOBİ Maliyet & Teşvik Değerlendirmesi
+        st.markdown("---")
+        st.subheader("💼 B2B & Proje Maliyet / Teşvik Uygunluğu")
+        arge_analiz = butce_ve_maliyet_denetimi_yap(talep)
+        
+        col_ar1, col_ar2, col_ar3 = st.columns(3)
+        with col_ar1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Harcama Sınıfı</div>
+                <div class="metric-value" style="font-size:1.05rem;">{arge_analiz.harcama_turu}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_ar2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Proje Maliyet Faslı</div>
+                <div class="metric-value" style="font-size:1.05rem;">{arge_analiz.tubitak_butce_kodu}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_ar3:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Tahmini Vergi/Teşvik Avantajı</div>
+                <div class="metric-value" style="color:#0d6efd;">{arge_analiz.tahmini_vergi_avantaji:,.2f} TRY</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with st.expander("📋 Maliyet Optimizasyonu & YMM Notu"):
+            st.write(f"**Tasarruf Tavsiyesi:** {arge_analiz.maliyet_optimizasyon_onerisi}")
+            st.info(f"**Denetçi & Muhasebe Notu:** {arge_analiz.denetim_ve_ymm_notu}")
+
+        # Tedarikçi Risk Puanlaması
+        risk_bilgi = tedarikci_kapsamli_risk_analizi(talep.tedarikci_adi or "", talep.toplam_tutar or 0.0)
+        with st.expander(f"🛡️ Tedarikçi Risk Değerlendirmesi ({risk_bilgi.risk_seviyesi} - Güven Skoru: {risk_bilgi.skor}/100)"):
+            st.write(f"**Tavsiye Edilen Ödeme Vadesi:** `{risk_bilgi.tavsiye_edilen_odeme_sartlari}`")
+            for f in risk_bilgi.risk_faktörleri:
+                st.markdown(f"- 📌 {f}")
+
         # İnsan Onay Paneli
         st.markdown("---")
         st.subheader("✍️ İnsan Onayı ve Karar Masası (Human-in-the-Loop)")
@@ -424,11 +556,288 @@ with tab_ana_akis:
 
 
 # =============================================================================
-# SEKME 2: YÖNETİM & BÜTÇE DASHBOARD
+# SEKME 2: İHALE & RFP ANALİZ MODÜLÜ (UYUM MATRİSİ & TEKLİF TASLAĞI)
+# =============================================================================
+with tab_ihale:
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 22px 26px; border-radius: 14px; border: 1px solid #cbd5e1; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 1.65rem; color: #0f172a; font-weight: 800;">📑 İhale / RFP Teknik Uyum ve Otomatik Teklif Modülü</h2>
+        <p style="margin: 6px 0 0 0; color: #475569; font-size: 0.95rem;">
+            Şartname kriterlerini şirket yetkinlik dokümanlarıyla <strong>(ChromaDB RAG)</strong> karşılaştırarak <strong>Teknik Uyum Matrisi</strong> ve <strong>Resmi Teklif Mektubu</strong> üretir.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # İhale Girdisi
+    col_ihale_sol, col_ihale_sag = st.columns([1, 1])
+
+    with col_ihale_sol:
+        st.subheader("1. İhale Şartnamesi / RFP Yükleme")
+        ihale_dosya = st.file_uploader(
+            "İhale Teknik Şartnamesi (PDF, PNG, JPG)",
+            type=["pdf", "png", "jpg", "jpeg"],
+            key="ihale_uploader"
+        )
+        
+        ihale_ornek_metin = (
+            "T.C. ULAŞTIRMA VE ALTYAPI BAKANLIĞI BİLGİ İŞLEM DAİRESİ BAŞKANLIĞI\n"
+            "KURUMSAL MİKROSERVİS VE VERİ GÜVENLİĞİ ENTEGRASYON PROJESİ TEKNİK ŞARTNAMESİ\n\n"
+            "1. Yüklenici firmanın ISO 27001 Bilgi Güvenliği ve CMMI Seviye 3 sertifikalarına sahip olması şarttır.\n"
+            "2. Sistem, Kubernetes kümeleme üzerinde yüksek erişilebilir mikroservis mimarisinde çalışacaktır.\n"
+            "3. Veri tabanı ve ağ iletişiminde TLS 1.3 ve AES-256 uçtan uca şifreleme sağlanacaktır.\n"
+            "4. Proje ekibinde en az 2 adet PMP sertifikalı kıdemli proje yöneticisi görevlendirilecektir.\n"
+            "5. Canlıya geçişten sonra 7/24 kesintisiz teknik destek, P1 arızalara 30 dakika içinde müdahale ve %99.95 Uptime taahhüdü verilecektir."
+        )
+
+        ihale_metin_alani = st.text_area(
+            "Veya Şartname Metnini Buraya Yapıştırın",
+            value=ihale_ornek_metin,
+            height=160,
+            key="ihale_text_input"
+        )
+
+    with col_ihale_sag:
+        st.subheader("2. Karşılaştırılacak Şirket Profili (RAG Kaynağı)")
+        st.info("💡 Sistem, ChromaDB'de kayıtlı olan kurumsal yetkinliklerinizi, Ar-Ge sertifikalarınızı ve SLA taahhütlerinizi referans alarak analiz yapar.")
+        st.text_area(
+            "Aktif Şirket Yetkinlik Dokümanı (sirket_yetkinlikleri.txt)",
+            value=varsayilan_yetkinlik,
+            height=210,
+            disabled=True
+        )
+
+    # Analiz Başlatma Butonu
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔍 İhale Şartnamesini Analiz Et & Teklif Taslağı Üret", type="primary"):
+        girdi_ihale = ihale_dosya if ihale_dosya is not None else ihale_metin_alani
+        dosya_adi_ihale = ihale_dosya.name if ihale_dosya is not None else "Şartname Metni"
+
+        with st.status(f"🔄 İhale Kriterleri & Şirket Yetkinlikleri Karşılaştırılıyor ({selected_model})...", expanded=True) as status_ihale:
+            try:
+                st.write("📑 Adım 1: Şartname metni ve teknik gereksinimler çıkarılıyor...")
+                st.write("🏢 Adım 2: ChromaDB vektör veri tabanından şirket yetkinlik maddeleri sorgulanıyor (RAG)...")
+                st.write(f"🧠 Adım 3: Yerel Qwen modeli ({selected_model}) ile teknik kriter uyum matrisi ve teklif mektubu oluşturuluyor...")
+                
+                rapor_ihale = ihale_sartname_ve_teklif_analizi(
+                    sartname_girdisi=girdi_ihale,
+                    dosya_adi=dosya_adi_ihale,
+                    sirket_yetkinlik_metni=varsayilan_yetkinlik,
+                    model=selected_model
+                )
+                st.session_state["ihale_raporu"] = rapor_ihale
+                # İhale Analizini Kalıcı SQLite Veritabanına Kaydet
+                database.add_tender_analysis(
+                    ihale_basligi=rapor_ihale.ihale_basligi,
+                    kurum_adi=rapor_ihale.kurum_adi or "İhale Makamı",
+                    tahmini_butce=rapor_ihale.tahmini_butce or "Belirtilmedi",
+                    genel_uyum_skoru=rapor_ihale.genel_uyum_skoru,
+                    kriter_sayisi=len(rapor_ihale.uyum_matrisi),
+                    uyum_matrisi=[m.model_dump() for m in rapor_ihale.uyum_matrisi],
+                    eksikler=rapor_ihale.eksik_ve_riskler,
+                    teklif_taslagi=rapor_ihale.teklif_taslagi
+                )
+                
+                status_ihale.update(label="✅ İhale Uyum Analizi ve Teklif Taslağı Başarıyla Üretildi & Veritabanına Kaydedildi!", state="complete")
+            except Exception as e:
+                status_ihale.update(label="❌ İhale analizi sırasında hata oluştu!", state="error")
+                st.error(f"Hata detayı: {str(e)}")
+                with st.expander("Hata Ayrıntısı"):
+                    st.code(traceback.format_exc())
+
+    # İhale Raporu Sonuç Ekranı
+    if st.session_state["ihale_raporu"] is not None:
+        rap: IhaleAnalizRaporu = st.session_state["ihale_raporu"]
+
+        st.markdown("---")
+        st.subheader("🎯 1. İhale Özeti ve Genel Uyum Durumu")
+
+        c_ih1, c_ih2, c_ih3, c_ih4 = st.columns(4)
+        with c_ih1:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">İhale Konusu / Başlık</div>
+                <div class="metric-value" style="font-size:1.05rem;">{rap.ihale_basligi[:40]}...</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_ih2:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">İlgili Kurum / İdare</div>
+                <div class="metric-value" style="font-size:1.1rem;">{rap.kurum_adi or 'Bakanlık / Kamu'}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_ih3:
+            skor_renk = "#155724" if rap.genel_uyum_skoru >= 80 else "#856404"
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Teknik Uyum Skoru</div>
+                <div class="metric-value" style="color: {skor_renk};">%{rap.genel_uyum_skoru}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_ih4:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-title">Toplam Kriter Sayısı</div>
+                <div class="metric-value">{len(rap.uyum_matrisi)} Madde</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # UYUM MATRİSİ TABLOSU
+        st.subheader("📊 2. İhale / Teklif Uyum Matrisi")
+        st.caption("Şartnamede aranan her bir maddenin şirketimizin mevcut yetkinlik, sertifika ve altyapı dokümanlarıyla karşılaştırması.")
+
+        matris_data = []
+        for m in rap.uyum_matrisi:
+            durum_simge = "✅ UYGUN" if m.durum.upper() == "UYGUN" else ("⚠️ KISMEN" if "KISMEN" in m.durum.upper() else "❌ UYGUN DEĞİL")
+            matris_data.append({
+                "Madde No": m.madde_no,
+                "Kategori": m.kategori,
+                "Şartname Gereksinimi": m.kriter_tanimi,
+                "Uyum Durumu": durum_simge,
+                "Şirket Karşılığı & Altyapı Notu": m.sirket_karsiligi
+            })
+
+        df_matris = pd.DataFrame(matris_data)
+        st.dataframe(df_matris, use_container_width=True, hide_index=True)
+
+        if rap.eksik_ve_riskler:
+            with st.expander("⚠️ Olası Riskler ve Tamamlanması Gereken Eksikler"):
+                for risk in rap.eksik_ve_riskler:
+                    st.markdown(f"- 🔸 {risk}")
+
+        st.markdown("---")
+
+        # OTOMATİK TEKLİF TASLAĞI
+        st.subheader("📝 3. Otomatik Oluşturulan Kurumsal İhale Teklif Taslağı")
+        st.caption("Teknik kriterlerin şirket yetkinlikleriyle eşleştirilmesi sonucunda üretilen resmi teklif mektubu.")
+
+        st.markdown(rap.teklif_taslagi)
+
+        col_ih_down1, col_ih_down2 = st.columns(2)
+        with col_ih_down1:
+            st.download_button(
+                label="📄 Teklif Taslağını İndir (.md / Word)",
+                data=rap.teklif_taslagi,
+                file_name=f"ihale_teklif_taslagi_{datetime.now().strftime('%Y%m%d')}.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+        with col_ih_down2:
+            matris_csv = df_matris.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📊 Uyum Matrisini İndir (.csv / Excel)",
+                data=matris_csv,
+                file_name=f"ihale_uyum_matrisi_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+
+# =============================================================================
+# SEKME 3: B2B / SAAS & PROJE MALİYET DENETİMİ (KOBİ & KURUMSAL AR-GE)
+# =============================================================================
+with tab_arge_mevzuat:
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 22px 26px; border-radius: 14px; border: 1px solid #cbd5e1; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 1.65rem; color: #0f172a; font-weight: 800;">💼 B2B / SaaS & Proje Maliyet Denetim Modülü</h2>
+        <p style="margin: 6px 0 0 0; color: #475569; font-size: 0.95rem;">
+            Bulut/SaaS lisans optimizasyonu, proje bütçe sınırları ve <strong>5746/4691 Ar-Ge Kurumlar Vergisi İstisnası</strong> denetim motoru.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_arge_sol, col_arge_sag = st.columns([1.1, 0.9])
+    with col_arge_sol:
+        st.subheader("1. Proje & Harcama Detayları")
+        arge_proje_adi = st.text_input(
+            "Proje / Ürün Adı",
+            value="Kurumsal B2B Bulut ve Büyük Dil Modeli Entegrasyonu"
+        )
+        arge_kategori = st.selectbox(
+            "Harcama Sınıfı",
+            [
+                "Yazılım Lisansı / Bulut Sunucu / SaaS (AWS, Azure, OpenAI vb.)",
+                "Donanım / Ar-Ge Ekipmanı / Sunucu Alımı",
+                "Dış Kaynak Yazılım & Teknik Danışmanlık",
+                "Test, Kalite Güvence ve Sertifikasyon",
+                "Genel Ofis ve Sarf Malzemesi"
+            ]
+        )
+        arge_tedarikci = st.text_input("Tedarikçi / Sağlayıcı Firma", value="Mega Nova Cloud & AI Services Ltd.")
+        arge_tutar = st.number_input("Harcama Tutarı (KDV Hariç TRY)", min_value=1000.0, value=120000.0, step=5000.0)
+        arge_aciklama = st.text_area(
+            "Harcama Amacı ve Kullanım Kapsamı",
+            value="Müşteri B2B projeleri için yıllık ayrılmış bulut sunucu kapasitesi ve mikroservis API aboneliği."
+        )
+
+    with col_arge_sag:
+        st.subheader("2. Maliyet Optimizasyonu & Teşvik Analizi")
+        st.caption("Şirket bütçe kuralları, KOBİ tasarruf önerileri ve Teknokent mevzuatı birlikte değerlendirilir.")
+
+        sahte_talep = SatinAlmaTalebi(
+            tedarikci_adi=arge_tedarikci,
+            toplam_tutar=arge_tutar,
+            para_birimi="TRY",
+            talep_turu=arge_kategori,
+            kalemler=[{"aciklama": arge_aciklama, "miktar": 1, "birim": "Adet", "birim_fiyat": arge_tutar, "toplam_fiyat": arge_tutar}]
+        )
+        degerlendirme = butce_ve_maliyet_denetimi_yap(sahte_talep, proje_adi=arge_proje_adi)
+
+        c_ar_m1, c_ar_m2 = st.columns(2)
+        with c_ar_m1:
+            st.metric("Ar-Ge / Vergi İstisnası Oranı", f"%{degerlendirme.muafiyet_veya_tesvik_orani}")
+        with c_ar_m2:
+            st.metric("Tahmini Vergi & Teşvik Tasarrufu", f"{degerlendirme.tahmini_vergi_avantaji:,.2f} TRY")
+
+        if degerlendirme.uygun_mu:
+            st.success(f"✔️ **BÜTÇEYE UYGUN:** {degerlendirme.tubitak_butce_kodu}")
+        else:
+            st.warning(f"⚠️ **KONTROL GEREKLİ:** {degerlendirme.tubitak_butce_kodu}")
+
+        st.markdown(f"**💡 Maliyet & Tasarruf Önerisi:** {degerlendirme.maliyet_optimizasyon_onerisi}")
+        st.info(f"**📋 YMM & Denetçi Notu:** {degerlendirme.denetim_ve_ymm_notu}")
+
+        if st.button("💾 Değerlendirmeyi Şirket Arşivine Kaydet", use_container_width=True):
+            database.add_arge_evaluation(
+                talep_id=None,
+                tedarikci=arge_tedarikci,
+                tutar=arge_tutar,
+                kategori=arge_kategori,
+                arge_kapsaminda_mi=degerlendirme.uygun_mu,
+                muafiyet_orani=degerlendirme.muafiyet_veya_tesvik_orani,
+                tahmini_vergi_avantaji=degerlendirme.tahmini_vergi_avantaji,
+                tubitak_butce_kodu=degerlendirme.tubitak_butce_kodu,
+                teknokent_gerekce=degerlendirme.maliyet_optimizasyon_onerisi,
+                denetim_notu=degerlendirme.denetim_ve_ymm_notu
+            )
+            st.success("✅ Maliyet ve bütçe denetim kaydı başarıyla SQLite veritabanına işlendi.")
+
+    st.markdown("---")
+    st.subheader("📜 Geçmiş B2B / Ar-Ge Maliyet ve Teşvik Denetim Kayıtları")
+    arge_gecmis = database.get_arge_evaluations(limit=30)
+    if arge_gecmis:
+        df_arge = pd.DataFrame(arge_gecmis)
+        kolonlar_ar = ["id", "tarih", "tedarikci", "tutar", "kategori", "tubitak_butce_kodu", "tahmini_vergi_avantaji", "teknokent_gerekce"]
+        mevcut_ar = [c for c in kolonlar_ar if c in df_arge.columns]
+        st.dataframe(df_arge[mevcut_ar], use_container_width=True, hide_index=True)
+    else:
+        st.info("Kayıtlı maliyet/bütçe denetim kaydı bulunamadı.")
+
+
+# =============================================================================
+# SEKME 4: YÖNETİM & BÜTÇE DASHBOARD
 # =============================================================================
 with tab_analitik:
-    st.title("📊 Satın Alma & Bütçe Yönetim Paneli")
-    st.markdown("Veritabanında kayıtlı tüm taleplerin özet istatistikleri, kategori dağılımı ve dışa aktarma araçları.")
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); padding: 22px 26px; border-radius: 14px; border: 1px solid #cbd5e1; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 1.65rem; color: #0f172a; font-weight: 800;">📊 Satın Alma & Bütçe Yönetim Paneli</h2>
+        <p style="margin: 6px 0 0 0; color: #475569; font-size: 0.95rem;">
+            Veritabanında kayıtlı tüm taleplerin özet istatistikleri, kategori dağılımı ve kurumsal rapor dışa aktarma araçları.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     db_kayitlari = database.get_requests(limit=100)
     
@@ -468,6 +877,18 @@ with tab_analitik:
             st.subheader("⚖️ Onay Durumları Dağılımı")
             durum_sayilari = df["durum"].value_counts()
             st.bar_chart(durum_sayilari)
+
+        # İhale Kayıtları Özeti (Dashboard)
+        st.markdown("---")
+        st.subheader("🏆 Kayıtlı İhale & Teklif Geçmişi")
+        ihale_gecmis = database.get_tender_analyses(limit=10)
+        if ihale_gecmis:
+            df_ih = pd.DataFrame(ihale_gecmis)
+            kolon_ih = ["id", "tarih", "ihale_basligi", "kurum_adi", "tahmini_butce", "genel_uyum_skoru", "kriter_sayisi"]
+            mevcut_ih = [c for c in kolon_ih if c in df_ih.columns]
+            st.dataframe(df_ih[mevcut_ih], use_container_width=True, hide_index=True)
+        else:
+            st.caption("Henüz kayıtlı ihale analizi bulunmuyor.")
 
         st.markdown("---")
         st.subheader("📑 Tüm Satın Alma Kayıtları (SQLite Tablosu)")
